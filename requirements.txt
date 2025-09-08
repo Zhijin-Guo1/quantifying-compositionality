@@ -1,0 +1,27 @@
+# Core dependencies
+numpy>=1.24.0
+pandas>=2.0.0
+scikit-learn>=1.3.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+tqdm>=4.65.0
+
+# Deep learning and embeddings
+torch>=2.0.0
+sentence-transformers>=2.2.0
+transformers>=4.30.0
+
+# Additional utilities
+pyyaml>=6.0
+jupyter>=1.0.0
+ipykernel>=6.20.0
+openpyxl>=3.0.0  # For reading Excel files (MorphoLex)
+scipy>=1.5.0     # For CCA and other numerical methods
+
+# Optional: For GPT embeddings
+openai>=0.27.0
+
+# Optional: For development
+pytest>=7.3.0
+black>=23.0.0
+flake8>=6.0.0
