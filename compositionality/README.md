@@ -73,9 +73,7 @@ analyzer.plot_results(results, save_path='results.png')
 ### Interpreting Results
 
 #### Overall Score
-- **>0.7**: Strong compositionality - embeddings capture attributes well
-- **0.4-0.7**: Moderate compositionality - partial alignment
-- **<0.4**: Weak compositionality - embeddings don't reflect attributes
+The compositionality score indicates the alignment between embeddings and attributes. Higher scores indicate stronger compositional structure.
 
 #### Individual Metrics
 

@@ -113,9 +113,7 @@ Plot saved to output/kg_TransE_compositionality.png
 
 ### Interpreting Results
 
-- **Score > 0.7**: Strong compositionality - KG embeddings encode demographic attributes well
-- **Score 0.4-0.7**: Moderate compositionality - partial demographic information captured
-- **Score < 0.4**: Weak compositionality - embeddings don't reflect demographics
+The compositionality score indicates the alignment between KG embeddings and demographic attributes. Higher scores indicate stronger compositional structure.
 
 ### Notes on Results
 

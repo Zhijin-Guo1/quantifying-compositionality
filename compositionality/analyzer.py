@@ -201,14 +201,7 @@ class CompositionalityAnalyzer:
             logger.info("\n" + "="*60)
             logger.info(f"OVERALL COMPOSITIONALITY SCORE: {results['overall_compositionality_score']:.4f}")
             logger.info("="*60)
-            logger.info("Interpretation:")
-            score = results['overall_compositionality_score']
-            if score > 0.7:
-                logger.info("  ✓ Strong compositionality - embeddings capture attributes well")
-            elif score > 0.4:
-                logger.info("  ~ Moderate compositionality - partial alignment")
-            else:
-                logger.info("  ✗ Weak compositionality - embeddings don't reflect attributes")
+            logger.info(f"Score interpretation: Higher scores indicate stronger compositional alignment")
         
         return results
     

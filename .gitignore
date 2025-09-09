@@ -21,6 +21,7 @@ env/
 # Jupyter Notebook
 .ipynb_checkpoints
 *.ipynb_checkpoints/
+notebooks/
 
 # Data files (add specific large data files if needed)
 *.csv
