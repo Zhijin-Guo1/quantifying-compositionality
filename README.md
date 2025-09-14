@@ -390,19 +390,6 @@ All experiments save results to `output/` directory:
 - **CUDA/GPU errors**: PyTorch will fall back to CPU automatically
 - **Permission errors**: Check write permissions for `output/` directory
 
-## 📊 Interpreting Results
-
-### Good Compositionality (Expected)
-- **CCA**: Real correlations >> permuted correlations
-- **Cosine similarity**: Real > 0.7, permuted < 0.5
-- **L2 loss**: Real < permuted
-- **Hits@k**: Real > 0.8, permuted < 0.2
-
-### Poor Compositionality
-- Real and permuted results are similar
-- P-values > 0.05 (not statistically significant)
-- Overall compositionality score < 0.3
-
 ## 📚 Citation
 
 If you use this code in your research, please cite:
@@ -416,21 +403,6 @@ If you use this code in your research, please cite:
 }
 ```
 
-## 🐛 Troubleshooting
-
-### Common Issues
-
-1. **Import errors**: Make sure you're in the project root and have activated the virtual environment
-2. **Missing OpenAI key for GPT**: Set `export OPENAI_API_KEY="your-key"`
-3. **Memory issues with LLaMA**: Use `load_in_8bit=True` parameter
-4. **Data not found**: Check `data_dir` paths in loaders
-
-### Getting Help
-
-- Run `python example_compositionality_pipeline.py` for a complete demo
-- Check module READMEs: [attributes/](attributes/), [embeddings/](embeddings/), [compositionality/](compositionality/)
-- Review notebooks in [notebooks/](notebooks/) for research examples
-- Open an issue on GitHub for bugs or questions
 
 ## 📄 License
 
