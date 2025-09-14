@@ -366,12 +366,12 @@ All experiments save results to `output/` directory:
 ## ⚙️ Common Parameters
 
 | Parameter | Default | Description |
-|-----------|---------|-------------||
-| `--cca-components` | 10-20 | Number of CCA components |
-| `--n-permutations` | 50 | Permutations for significance testing |
-| `--n-trials` | 50 | Leave-one-out trials |
-| `--plot` | False | Generate visualization plots |
-| `--verbose` | False | Show detailed progress |
+|-----------|---------|-------------|
+| `--cca-components` | 10-20   | Number of CCA components |
+| `--n-permutations` | 100     | Permutations for significance testing |
+| `--n-trials` | 100     | Leave-one-out trials |
+| `--plot` | False   | Generate visualization plots |
+| `--verbose` | False   | Show detailed progress |
 | `--output-dir` | output/ | Where to save results |
 
 ## 🔧 Troubleshooting
