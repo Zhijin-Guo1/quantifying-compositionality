@@ -35,7 +35,7 @@ All attribute generators inherit from `BaseAttributeGenerator` which provides:
 from attributes import SentenceConceptAttributes
 
 generator = SentenceConceptAttributes(
-    data_path=Path("data/output"),
+    data_path=Path("data/sentence"),
     cache_dir=Path("cache/attributes"),
     min_concepts=3,
     max_concepts=4

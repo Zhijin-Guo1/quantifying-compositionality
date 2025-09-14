@@ -119,74 +119,113 @@ quantifying-compositionality/
 
 ## 🔬 Running Experiments
 
-### Quick Start - Choose Your Experiment
+### Quick Start - Prerequisites Check
 
 ```bash
-# Run specific experiment types
-python run_experiments.py --experiment sentence  # Sentence compositionality only
-python run_experiments.py --experiment word      # Word compositionality only  
-python run_experiments.py --experiment kg        # KG compositionality only
-python run_experiments.py --experiment layer-wise # Layer-wise SBERT analysis
-python run_experiments.py --experiment all       # Run all experiments
+# Check setup for each experiment type
+python check_sentence_setup.py  # For sentence experiment
+python check_word_setup.py      # For word experiment
+
+# Install required packages
+pip install -r requirements.txt
 ```
 
-### Detailed Usage for Each Experiment Type
+### Overview of Experiments
 
-### 1. Sentence Compositionality (Concepts)
+| Experiment | Data Required | Model Required | Output |
+|------------|--------------|----------------|--------|
+| **Sentence** | Pre-prepared dialogue data (included) | SBERT (auto-download) | CCA & decomposition plots |
+| **Word** | MorphoLEX dataset + GoogleNews Word2Vec | Manual download required | Morphology analysis plots |
+| **KG** | MovieLens 1M + Pre-trained embeddings | Included in repo | User demographic plots |
+| **Layer-wise** | None (uses demo sentences) | SBERT (auto-download) | Layer-by-layer analysis |
 
-#### Basic Usage
+### Detailed Setup and Usage for Each Experiment
+
+### 1. Sentence Experiment (Dialogue Slots)
+
+#### ✅ Prerequisites
+- **Data**: Pre-prepared dialogue data (✓ included in repo)
+  - `data/sentence/user_texts.txt` - 2,458 dialogue sentences
+  - `data/sentence/dialogue_data.csv` - Binary slot attributes
+- **Model**: SBERT model (auto-downloads on first run)
+
+#### 🚀 Quick Run
 ```bash
-# Run with default demo sentences
-python run_experiments.py --experiment sentence --plot --save-results
+# Step 1: Verify setup
+python check_sentence_setup.py
 
-# Use your own sentences file
-python run_experiments.py --experiment sentence \
-    --data-path my_sentences.txt \
-    --plot --save-results
+# Step 2: Run experiment
+python run_experiments.py --experiment sentence --plot --verbose
+```
 
-# Specify SBERT model and layer
+#### 📊 What It Does
+- Loads 2,458 pre-prepared dialogue sentences
+- Extracts SBERT embeddings (layer 6 of all-MiniLM-L6-v2)
+- Performs CCA with 15 components
+- Groups by unique slot combinations for decomposition (~400 groups)
+- Generates 4 analysis plots
+
+#### 🎛️ Advanced Options
+```bash
+# Use different SBERT model or layer
 python run_experiments.py --experiment sentence \
     --sbert-model sentence-transformers/all-mpnet-base-v2 \
-    --layer 6 \
+    --layer 8 \
     --plot
 
-# Custom concept vocabulary
+# Custom analysis parameters
 python run_experiments.py --experiment sentence \
-    --concept-vocabulary "location,time,service,genre,quantity" \
-    --cca-components 15 \
-    --n-permutations 100
-```
-
-#### Input Format
-Create a text file with one sentence per line:
-```text
-Book a table for dinner tomorrow
-Find flights from New York to London  
-Show me movies playing tonight
-```
-
-### 2. Word Compositionality (Morphology)
-
-#### Basic Usage
-```bash
-# Run with default demo words
-python run_experiments.py --experiment word --plot --save-results
-
-# Use your own word list
-python run_experiments.py --experiment word \
-    --data-path my_words.txt \
-    --plot --save-results
-
-# Use different pretrained Word2Vec model
-python run_experiments.py --experiment word \
-    --pretrained-word2vec glove-twitter-200 \
+    --cca-components 20 \
+    --n-permutations 100 \
+    --n-trials 100 \
     --plot
-
-# Use custom Word2Vec model
-python run_experiments.py --experiment word \
-    --word2vec-model path/to/my_word2vec.model \
-    --word-attribute-type morphological
 ```
+
+### 2. Word Experiment (Morphology)
+
+#### ⚠️ Prerequisites (MANUAL DOWNLOAD REQUIRED)
+
+1. **MorphoLEX Dataset** (✓ included in repo):
+   - Already at: `data/MorphoLEX_en.xlsx`
+   - If missing, download from: http://www.lexique.org/?page_id=250
+
+2. **GoogleNews Word2Vec Model** (❌ MUST DOWNLOAD MANUALLY):
+   - **File**: `GoogleNews-vectors-negative300.bin.gz` (~1.5 GB)
+   - **Download from ONE of these**:
+     - [Google Drive](https://drive.google.com/file/d/0B7XkCwpI5KDYNlNUTTlSS21pQmM/)
+     - [Kaggle](https://www.kaggle.com/datasets/leadbest/googlenewsvectors)
+     - [GitHub Mirror](https://github.com/mmihaltz/word2vec-GoogleNews-vectors)
+   - **Save to**: `data/GoogleNews-vectors-negative300.bin.gz`
+
+#### 🚀 Quick Run
+```bash
+# Step 1: Download GoogleNews model (REQUIRED - see links above)
+# Save to: data/GoogleNews-vectors-negative300.bin.gz
+
+# Step 2: Verify setup
+python check_word_setup.py  # Will check both files exist
+
+# Step 3: Run experiment
+python run_experiments.py --experiment word --plot --verbose
+```
+
+#### 📊 What It Does
+- Loads ~18,000 words from MorphoLEX
+- Filters words with GoogleNews embeddings (~17,730 words)
+- CCA analysis with 20 components on full dataset
+- Linear decomposition on ~328 words with exactly 3 suffixes
+- Generates 4 analysis plots
+
+#### 📈 Expected Results
+- **CCA**: Clear separation (real ~0.7-0.9 vs permuted ~0.1-0.2)
+- **Cosine similarity**: ~0.78 real vs ~0.49 random
+- **Hits@10**: ~0.93 real vs ~0.10 random
+- **L2 loss**: Significantly lower for real data
+
+#### ⚠️ Important
+- **GoogleNews model is REQUIRED** - experiment won't run without it
+- Model file can be `.bin.gz` or unzipped `.bin`
+- Processing may take time due to large model size (3.4 GB uncompressed)
 
 #### Input Format
 Create a text file with one word per line:
@@ -197,14 +236,45 @@ booked
 books
 ```
 
-### 3. Knowledge Graph Compositionality (MovieLens Demographics)
+### 3. KG Experiment (MovieLens User Demographics)
 
-> **📘 See [KG_EXPERIMENTS.md](KG_EXPERIMENTS.md) for detailed KG experiment instructions**
+#### ✅ Prerequisites
+- **MovieLens 1M Dataset**: Download from [GroupLens](https://grouplens.org/datasets/movielens/1m/)
+  - Extract to: `data/ml-1m/`
+- **Pre-trained KG Embeddings**: (✓ included in repo)
+  - `KG_embedding/300_epochs_TransE_gpu34.pt`
+  - `KG_embedding/300_epochs_DistMult_gpu34.pt`
 
-#### Prerequisites
-1. **MovieLens 1M Dataset**:
-   - Download from: https://grouplens.org/datasets/movielens/1m/
-   - Extract to `ml-1m/` directory
+#### 🚀 Quick Run
+```bash
+# Step 1: Download and extract MovieLens 1M
+wget https://files.grouplens.org/datasets/movielens/ml-1m.zip
+unzip ml-1m.zip -d data/
+
+# Step 2: Run experiment
+python run_experiments.py --experiment kg --plot --verbose
+```
+
+#### 📊 What It Does
+- Loads 6,040 MovieLens users with demographics
+- Creates one-hot encoding for gender, age, occupation (30 features)
+- Loads pre-trained TransE/DistMult embeddings
+- Groups users by identical demographics
+- Performs CCA and decomposition analysis
+
+#### 🎛️ Options
+```bash
+# Use DistMult instead of TransE
+python run_experiments.py --experiment kg \
+    --kg-model distMult \
+    --plot
+
+# Include occupation features (default is gender+age only)
+python run_experiments.py --experiment kg \
+    --include-occupation \
+    --plot
+```
+   - Extract to `data/ml-1m/` directory
 
 2. **Pre-trained KG embeddings** in `KG_embedding/`:
    - `300_epochs_TransE_gpu34.pt` (6040 user embeddings)
@@ -212,24 +282,26 @@ books
 
 #### Basic Usage
 ```bash
-# Run with TransE embeddings and MovieLens data
+# Run with TransE embeddings (default)
 python run_experiments.py --experiment kg \
-    --movielens-dir ml-1m \
-    --kg-model TransE \
-    --plot --save-results
+    --cca-components 10 \
+    --plot
 
 # Run with DistMult embeddings
 python run_experiments.py --experiment kg \
-    --movielens-dir ml-1m \
-    --kg-model DistMult \
+    --kg-embedding distMult \
     --normalize-kg \
     --plot
 
-# Specify custom directories
+# Full command with all parameters
 python run_experiments.py --experiment kg \
-    --movielens-dir path/to/movielens \
-    --kg-embedding-dir path/to/embeddings \
-    --kg-model TransE
+    --movielens-dir data/ml-1m \
+    --kg-embedding transE \
+    --n-permutations 100 \
+    --n-trials 30 \
+    --cca-components 10 \
+    --output-dir results \
+    --plot
 ```
 
 The system automatically:
@@ -238,21 +310,33 @@ The system automatically:
 - Maps user IDs to embedding indices (user 1 → index 0, etc.)
 - Groups users with identical demographics for analysis
 
-### 4. Layer-wise Analysis (SBERT)
+### 4. Layer-wise Experiment (SBERT Layer Analysis)
 
-#### Basic Usage
+#### ✅ Prerequisites
+- **Data**: None (uses demo sentences)
+- **Model**: SBERT (auto-downloads)
+
+#### 🚀 Quick Run
 ```bash
-# Analyze compositionality across all SBERT layers
-python run_experiments.py --experiment layer-wise \
-    --sbert-model sentence-transformers/all-MiniLM-L6-v2 \
-    --plot --save-results
+# Analyze all layers of SBERT
+python run_experiments.py --experiment layer-wise --plot --verbose
+```
 
-# Use different model
+#### 📊 What It Does
+- Uses demo sentences with concept attributes
+- Extracts embeddings from each SBERT layer (0-6 for MiniLM)
+- Computes compositionality score per layer
+- Shows how compositionality evolves through network depth
+- Typically peaks at middle layers (4-5)
+
+#### 🎛️ Options
+```bash
+# Use different SBERT model
 python run_experiments.py --experiment layer-wise \
     --sbert-model sentence-transformers/all-mpnet-base-v2 \
     --plot
 
-# Faster analysis with fewer permutations
+# Faster analysis
 python run_experiments.py --experiment layer-wise \
     --n-permutations 20 \
     --n-trials 20 \
@@ -261,53 +345,63 @@ python run_experiments.py --experiment layer-wise \
 
 ### 5. Run All Experiments
 
-```bash
-# Run all experiments with default settings
-python run_experiments.py --experiment all --plot --save-results
-
-# Run all with custom parameters
-python run_experiments.py --experiment all \
-    --n-permutations 100 \
-    --n-trials 100 \
-    --cca-components 15 \
-    --plot --save-results \
-    --output-dir results/
-```
-
-### Common Analysis Parameters
+⚠️ **Note**: Requires all prerequisites from experiments 1-4 to be met.
 
 ```bash
-# Analysis configuration
---cca-components 10           # Number of CCA components (default: 10)
---decomposition-method pseudo_inverse  # Method: pseudo_inverse or lstsq
---methods cca,decomposition,metrics    # Analysis methods to use
---n-permutations 50          # Permutations for significance testing (default: 50)
---n-trials 50                # Leave-one-out trials (default: 50)
---group-by-attributes        # Group samples with identical attributes
-
-# Output options
---save-results               # Save results to NPZ file
---plot                       # Generate and save visualizations
---output-dir output/         # Output directory (default: output/)
---verbose                    # Show detailed progress
---debug                      # Show full error traces
---random-seed 42            # Set random seed for reproducibility
+# Run all experiments (if all data is prepared)
+python run_experiments.py --experiment all --plot --verbose
 ```
 
-### Help and Available Options
+## 📁 Output Files
 
-```bash
-# Show all available options
-python run_experiments.py --help
+All experiments save results to `output/` directory:
+- **`.npz` files**: NumPy arrays with raw results
+- **`.json` files**: Human-readable summaries (KG only)
+- **`.png` files**: 4 plots per experiment:
+  - CCA correlation curves
+  - L2 loss distributions
+  - Cosine similarity histograms
+  - Retrieval accuracy (Hits@k)
 
-# Example output shows:
-# --experiment: Choose from sentence, word, kg, layer-wise, all
-# --data-path: Path to your input data file
-# --sbert-model: SBERT model for sentences
-# --kg-model: TransE or DistMult for KG
-# --morpholex-path: Path to MorphoLEX_en.xlsx for word experiments
-# And many more...
-```
+## ⚙️ Common Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------||
+| `--cca-components` | 10-20 | Number of CCA components |
+| `--n-permutations` | 50 | Permutations for significance testing |
+| `--n-trials` | 50 | Leave-one-out trials |
+| `--plot` | False | Generate visualization plots |
+| `--verbose` | False | Show detailed progress |
+| `--output-dir` | output/ | Where to save results |
+
+## 🔧 Troubleshooting
+
+### Word Experiment Issues
+- **"GoogleNews model not found"**: Must manually download from links above
+- **SSL certificate errors**: Download manually using browser
+- **Memory errors**: Model is 3.4 GB - ensure sufficient RAM
+
+### Sentence Experiment Issues
+- **Data files missing**: Ensure `data/sentence/` contains both required files
+- **SBERT download fails**: Will auto-retry, or install manually with `pip install sentence-transformers`
+
+### General Issues
+- **Import errors**: Run `pip install -r requirements.txt`
+- **CUDA/GPU errors**: PyTorch will fall back to CPU automatically
+- **Permission errors**: Check write permissions for `output/` directory
+
+## 📊 Interpreting Results
+
+### Good Compositionality (Expected)
+- **CCA**: Real correlations >> permuted correlations
+- **Cosine similarity**: Real > 0.7, permuted < 0.5
+- **L2 loss**: Real < permuted
+- **Hits@k**: Real > 0.8, permuted < 0.2
+
+### Poor Compositionality
+- Real and permuted results are similar
+- P-values > 0.05 (not statistically significant)
+- Overall compositionality score < 0.3
 
 ## 📊 Understanding Results
 

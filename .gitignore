@@ -38,7 +38,14 @@ notebooks/
 *.pth
 *.ckpt
 *.bin
+*.bin.gz
+*.bin.zip
 *.safetensors
+
+# Large Word2Vec models (GoogleNews)
+data/GoogleNews-vectors-negative300.*
+GoogleNews-vectors-negative300.*
+**/GoogleNews-vectors-*.bin*
 
 # Results and outputs
 results/

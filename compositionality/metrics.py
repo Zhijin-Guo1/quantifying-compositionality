@@ -151,7 +151,16 @@ class CompositionalityMetrics:
         
         mean_embeddings = np.array(mean_embeddings)
         
-        logger.info(f"Grouped {len(attributes)} samples into {len(unique_attributes)} unique combinations")
+        # Log grouping results with context
+        n_features = attributes.shape[1]
+        n_unique = len(unique_attributes)
+        
+        if n_features == 9:  # Only age and gender
+            logger.info(f"Grouped {len(attributes)} samples into {n_unique} unique combinations (expected 14 for 2 genders × 7 ages)")
+        elif n_features == 30:  # Age, gender, and occupation
+            logger.info(f"Grouped {len(attributes)} samples into {n_unique} unique combinations")
+        else:
+            logger.info(f"Grouped {len(attributes)} samples into {n_unique} unique combinations")
         
         return unique_attributes, mean_embeddings
     
@@ -159,7 +168,8 @@ class CompositionalityMetrics:
     def compute_all_metrics(attributes: np.ndarray,
                            embeddings: np.ndarray,
                            n_permutations: int = 100,
-                           n_trials: int = 100) -> Dict:
+                           n_trials: int = 100,
+                           group_duplicates: bool = True) -> Dict:
         """
         Compute all compositionality metrics with permutation testing.
         
@@ -168,17 +178,18 @@ class CompositionalityMetrics:
             embeddings: Embedding matrix
             n_permutations: Number of permutations
             n_trials: Number of trials for leave-one-out
+            group_duplicates: Whether to group samples with duplicate attributes
             
         Returns:
             metrics: Dictionary of all metrics
         """
         metrics = {}
         
-        # Group by unique attributes if there are duplicates
+        # Group by unique attributes if there are duplicates AND grouping is requested
         n_samples = len(attributes)
         unique_attrs = len(np.unique(attributes, axis=0))
         
-        if unique_attrs < n_samples:
+        if group_duplicates and unique_attrs < n_samples:
             logger.info("Grouping by unique attribute combinations...")
             attributes, embeddings = CompositionalityMetrics.group_by_attributes(
                 attributes, embeddings
@@ -262,5 +273,10 @@ class CompositionalityMetrics:
         hits_improvement = (metrics['hits@5'] - metrics['permuted_hits@5_mean']) / (1 - metrics['permuted_hits@5_mean'] + 1e-10)
         
         metrics['compositionality_score'] = np.clip((cosine_improvement + hits_improvement) / 2, 0, 1)
+        
+        logger.info(f"\nMetrics Analysis Results:")
+        logger.info(f"  Mean cosine similarity: {metrics['mean_cosine_similarity']:.4f}")
+        logger.info(f"  Hits@5: {metrics.get('hits@5', 0):.4f}")
+        logger.info(f"  Compositionality score: {metrics['compositionality_score']:.4f}")
         
         return metrics

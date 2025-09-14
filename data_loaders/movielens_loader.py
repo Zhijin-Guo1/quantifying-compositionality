@@ -107,12 +107,13 @@ class MovieLensLoader:
             logger.warning(f"Failed to parse README, using default occupations: {e}")
             return self._load_occupation_mapping.__defaults__[0]
     
-    def create_demographic_attributes(self, users_df):
+    def create_demographic_attributes(self, users_df, include_occupation=False):
         """
         Create binary demographic attribute matrix.
         
         Args:
             users_df: DataFrame with user demographics
+            include_occupation: Whether to include occupation features
             
         Returns:
             attributes: Binary attribute matrix (n_users, n_attributes)
@@ -121,9 +122,17 @@ class MovieLensLoader:
         # Create one-hot encoding for demographics
         logger.info("Creating demographic attribute matrix...")
         
-        # Encode gender, age, and occupation
+        # Choose which features to encode
+        if include_occupation:
+            features_to_encode = ['gender', 'age', 'occupation']
+            logger.info("Including gender, age, and occupation features")
+        else:
+            features_to_encode = ['gender', 'age']
+            logger.info("Including only gender and age features (no occupation)")
+        
+        # Encode selected features
         encode_attribute = pd.get_dummies(
-            users_df[['gender', 'age', 'occupation']].astype(str)
+            users_df[features_to_encode].astype(str)
         )
         
         # Convert to numpy array
@@ -133,11 +142,19 @@ class MovieLensLoader:
         logger.info(f"Created attribute matrix: shape {attributes.shape}")
         logger.info(f"Features: {len(feature_names)} total")
         
+        if not include_occupation:
+            # Log the unique combinations when occupation is excluded
+            unique_combos = users_df[['gender', 'age']].drop_duplicates()
+            logger.info(f"Unique demographic combinations: {len(unique_combos)} (2 genders × 7 ages = 14 expected)")
+        
         return attributes, feature_names
     
-    def prepare_kg_data(self):
+    def prepare_kg_data(self, include_occupation=False):
         """
         Prepare complete KG data for compositionality analysis.
+        
+        Args:
+            include_occupation: Whether to include occupation in attributes
         
         Returns:
             dict with:
@@ -150,7 +167,9 @@ class MovieLensLoader:
         users_df, user_ids = self.load_users()
         
         # Create attributes
-        attributes, feature_names = self.create_demographic_attributes(users_df)
+        attributes, feature_names = self.create_demographic_attributes(
+            users_df, include_occupation=include_occupation
+        )
         
         return {
             'users_df': users_df,

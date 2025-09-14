@@ -17,6 +17,7 @@ jupyter>=1.0.0
 ipykernel>=6.20.0
 openpyxl>=3.0.0  # For reading Excel files (MorphoLex)
 scipy>=1.5.0     # For CCA and other numerical methods
+gensim>=4.3.0    # For Word2Vec models
 
 # Optional: For GPT embeddings
 openai>=0.27.0

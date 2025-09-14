@@ -30,92 +30,93 @@ def run_sentence_experiment(args) -> Optional[Dict]:
     try:
         from embeddings import SentenceBERTExtractor
         from compositionality import CompositionalityAnalyzer
-        from data_loaders import DialogueLoader
+        from data_loaders.sentence_loader import SentenceDataLoader
         
         print("\n" + "="*70)
         print("SENTENCE COMPOSITIONALITY EXPERIMENT")
         print("="*70)
         
-        # Load Schema-Guided Dialogue data
-        print(f"\nLoading Schema-Guided Dialogue data from {args.dialogue_dir}...")
-        dialogue_loader = DialogueLoader(
-            data_dir=args.dialogue_dir,
-            min_slots=args.min_slots
-        )
-        
+        # Load pre-prepared sentence data (matching notebook approach)
+        print(f"\n1. Loading sentence data from {args.sentence_data_dir}...")
+
+        # Check if using pre-prepared data (notebook format)
+        sentence_loader = SentenceDataLoader(data_dir=args.sentence_data_dir)
+
         try:
-            dialogue_data = dialogue_loader.prepare_dialogue_data()
-            sentences = dialogue_data['sentences']
-            attributes = dialogue_data['attributes']
-            feature_names = dialogue_data['feature_names']
-            
-            print(f"Loaded {len(sentences)} sentences")
-            print(f"Unique slot combinations: {dialogue_data['n_unique_patterns']}")
+            # Load data matching notebook format
+            sentence_data = sentence_loader.load_data()
+            sentences = sentence_data['sentences']
+            attributes = sentence_data['attributes']
+            feature_names = sentence_data['feature_names']
+
+            print(f"   Loaded {len(sentences)} sentences")
+            print(f"   Unique slot combinations: {sentence_data['n_unique_combinations']}")
             print(f"   Attributes shape: {attributes.shape}")
-            print(f"   Number of slots: {len(feature_names)}")
+            print(f"   Number of features: {len(feature_names)}")
             
+        except FileNotFoundError as e:
+            print(f"\nERROR: {e}")
+            print("\nThe sentence experiment requires pre-prepared data files:")
+            print("  - data/sentence/user_texts.txt")
+            print("  - data/sentence/dialogue_data.csv")
+            print("\nThese files contain pre-extracted sentences and attributes.")
+            print("Please ensure these files exist before running the experiment.")
+            return None
         except Exception as e:
-            print(f"Failed to load dialogue data: {e}")
-            print("Please ensure Schema-Guided Dialogue data is in the specified directory")
-            print("Download from: https://github.com/google-research-datasets/dstc8-schema-guided-dialogue")
-            
-            # Fall back to demo sentences if data not available
-            if args.use_demo_fallback:
-                print("\nFalling back to demo sentences...")
-                sentences = [
-                    "I'd like to book a table for two at an Italian restaurant in downtown.",
-                    "Can you find me a flight from New York to London next Monday?",
-                    "What movies are playing tonight at the theater near me?",
-                ] * 10  # Replicate for testing
-                
-                from attributes import SentenceAttributeExtractor
-                attr_extractor = SentenceAttributeExtractor()
-                attributes, feature_names = attr_extractor.extract(sentences)
-            else:
-                return None
+            print(f"Failed to load sentence data: {e}")
+            return None
         
-        # Extract embeddings
+        # Extract embeddings (matching notebook: all-MiniLM-L6-v2, layer 6, normalized)
         print("\n2. Extracting SBERT embeddings...")
-        embed_extractor = SentenceBERTExtractor(
-            model_name=args.sbert_model or 'sentence-transformers/all-MiniLM-L6-v2'
-        )
-        
-        if args.layer is not None:
-            print(f"   Extracting from layer {args.layer}...")
-            embeddings = embed_extractor.extract(sentences, layer=args.layer, normalize=True)
-        else:
-            embeddings = embed_extractor.extract(sentences, normalize=True)
-        
+        model_name = args.sbert_model or 'sentence-transformers/all-MiniLM-L6-v2'
+        embed_extractor = SentenceBERTExtractor(model_name=model_name)
+
+        # Default to layer 6 if not specified (matching notebook)
+        layer = args.layer if args.layer is not None else 6
+
+        print(f"   Model: {model_name}")
+        print(f"   Extracting from layer {layer}...")
+        embeddings = embed_extractor.extract(sentences, layer=layer, normalize=True)
+
         print(f"   Embeddings shape: {embeddings.shape}")
         
         # Analyze compositionality
         print("\n3. Analyzing compositionality...")
+
+        # Set CCA components (notebook uses 15 for sentences)
+        cca_components = args.cca_components if args.cca_components else 15
+
         analyzer = CompositionalityAnalyzer(
-            cca_components=args.cca_components,
-            decomposition_method=args.decomposition_method
+            cca_components=cca_components,
+            decomposition_method=args.decomposition_method,
+            random_seed=2  # Match notebook's random seed
         )
-        
+
+        # Note: The notebook uses:
+        # - ALL data for CCA (no grouping)
+        # - GROUPED data for linear decomposition
+        # This is handled by group_by_attributes=True
         results = analyzer.analyze_compositionality(
             embeddings=embeddings,
             attributes=attributes,
             methods=args.methods.split(','),
             n_permutations=args.n_permutations,
             n_trials=args.n_trials,
-            group_by_attributes=args.group_by_attributes,
+            group_by_attributes=True,  # Group for decomposition (like notebook)
             verbose=args.verbose
         )
         
-        # Save results
-        if args.save_results:
-            save_path = os.path.join(args.output_dir, 'sentence_results.npz')
-            np.savez_compressed(save_path, **results)
-            print(f"\nResults saved to {save_path}")
+        # Always save results
+        os.makedirs(args.output_dir, exist_ok=True)
+        save_path = os.path.join(args.output_dir, 'sentence_results.npz')
+        np.savez_compressed(save_path, **results)
+        print(f"\nResults saved to {save_path}")
         
         # Plot if requested
         if args.plot:
-            plot_path = os.path.join(args.output_dir, 'sentence_compositionality.png')
-            analyzer.plot_results(results, save_path=plot_path)
-            print(f"Plot saved to {plot_path}")
+            # Generate 4 individual plots matching notebook style
+            analyzer.plot_results_individual(results, data_type='sentence', output_dir=args.output_dir)
+            print(f"Plots saved to {args.output_dir}/")
         
         return results
         
@@ -130,7 +131,6 @@ def run_sentence_experiment(args) -> Optional[Dict]:
 def run_word_experiment(args) -> Optional[Dict]:
     """Run word compositionality experiment."""
     try:
-        from attributes import WordAttributeExtractor
         from embeddings import Word2VecExtractor
         from compositionality import CompositionalityAnalyzer
         from data_loaders import MorphoLEXLoader
@@ -145,88 +145,185 @@ def run_word_experiment(args) -> Optional[Dict]:
             print(f"\nLoading MorphoLEX data from {args.morpholex_path}...")
             ml_loader = MorphoLEXLoader(excel_path=args.morpholex_path)
             use_morpholex = True
-        elif os.path.exists('Downloads/MorphoLEX_en.xlsx'):
+        elif os.path.exists('data/MorphoLEX_en.xlsx'):
             print("\nFound MorphoLEX data at default location...")
-            ml_loader = MorphoLEXLoader()
+            ml_loader = MorphoLEXLoader(excel_path='data/MorphoLEX_en.xlsx')
             use_morpholex = True
         
+        if not use_morpholex:
+            print("\nERROR: MorphoLEX_en.xlsx file not found!")
+            print("Expected location: data/MorphoLEX_en.xlsx")
+            print("Please ensure the file exists before running word experiments.")
+            return None
+            
         if use_morpholex:
-            # Load word list if provided
-            word_list = None
-            if args.data_path and os.path.exists(args.data_path):
-                with open(args.data_path, 'r') as f:
-                    word_list = [line.strip() for line in f if line.strip()]
-                print(f"Filtering to {len(word_list)} words from {args.data_path}")
-            
-            word_data = ml_loader.prepare_word_data(word_list=word_list)
-            words = word_data['words']
-            attributes = word_data['attributes']
-            feature_names = word_data['feature_names']
-        else:
-            # Fallback to demo data or word list
-            if args.data_path and os.path.exists(args.data_path):
-                print(f"\nLoading words from {args.data_path}...")
-                with open(args.data_path, 'r') as f:
-                    words = [line.strip() for line in f if line.strip()]
+            # Load Word2Vec model (REQUIRED for accurate results)
+            print("\n1. Loading Word2Vec model...")
+            embed_extractor = None
+            word2vec_model = None
+
+            # Check for GoogleNews model in standard locations
+            googlenews_paths = [
+                "data/GoogleNews-vectors-negative300.bin.gz",
+                "data/GoogleNews-vectors-negative300.bin",
+                os.path.expanduser("~/Downloads/GoogleNews-vectors-negative300.bin.gz"),
+                os.path.expanduser("~/Downloads/GoogleNews-vectors-negative300.bin"),
+                "./GoogleNews-vectors-negative300.bin.gz",
+                "./GoogleNews-vectors-negative300.bin",
+            ]
+
+            # Add custom path if specified
+            if args.word2vec_model:
+                googlenews_paths.insert(0, args.word2vec_model)
+
+            # Find the model
+            model_path = None
+            for path in googlenews_paths:
+                if os.path.exists(path):
+                    model_path = path
+                    break
+
+            if model_path:
+                try:
+                    print(f"   Found GoogleNews model at: {model_path}")
+                    embed_extractor = Word2VecExtractor(model_path=model_path)
+                    word2vec_model = embed_extractor.keyed_vectors
+                    print(f"   ✓ Loaded GoogleNews Word2Vec model ({len(word2vec_model):,} words)")
+                except Exception as e:
+                    print(f"   ✗ Failed to load model: {e}")
+                    word2vec_model = None
             else:
-                print("\nUsing demo words with morphological patterns...")
-                print("NOTE: For real experiments, download MorphoLEX_en.xlsx from:")
-                print("      http://www.lexique.org/?page_id=250")
-                words = [
-                    # Base forms
-                    "book", "play", "run", "write", "read", "walk", "talk", "work",
-                    # -ing forms
-                    "booking", "playing", "running", "writing", "reading", "walking", "talking", "working",
-                    # -ed forms
-                    "booked", "played", "ran", "written", "read", "walked", "talked", "worked",
-                    # -er forms
-                    "booker", "player", "runner", "writer", "reader", "walker", "talker", "worker",
-                    # -s forms
-                    "books", "plays", "runs", "writes", "reads", "walks", "talks", "works",
-                    # Prefixes
-                    "unbook", "replay", "rerun", "rewrite", "reread", "unwalk", "retalk", "rework",
-                    # Compounds
-                    "bookshelf", "playground", "runway", "writeup", "readout", "walkway", "talkshow", "workday"
-                ]
+                print("\n" + "="*70)
+                print("ERROR: GoogleNews Word2Vec Model Not Found")
+                print("="*70)
+                print("The word experiment requires the GoogleNews Word2Vec model")
+                print("to reproduce the results from the notebook.")
+                print("\nPlease download the model:")
+                print("\n1. Download GoogleNews-vectors-negative300.bin.gz from:")
+                print("   https://drive.google.com/file/d/0B7XkCwpI5KDYNlNUTTlSS21pQmM/")
+                print("   (File size: ~1.5 GB)")
+                print("\n2. Save it to one of these locations:")
+                print("   - data/GoogleNews-vectors-negative300.bin.gz")
+                print("   - ~/Downloads/GoogleNews-vectors-negative300.bin.gz")
+                print("\n3. Run the experiment again")
+                print("\nAlternatively, specify the path:")
+                print("   python run_experiments.py --experiment word --word2vec-model /path/to/model.bin.gz")
+                print("="*70)
+                return None
             
-            # Extract attributes using WordAttributeExtractor
-            print("\n1. Extracting morphological attributes...")
-            attr_extractor = WordAttributeExtractor(
-                attribute_type=args.word_attribute_type or 'morphological'
-            )
-            attributes, feature_names = attr_extractor.extract(words)
+            # Prepare CCA data WITHOUT Word2Vec filtering (like notebook)
+            print("\n2. Preparing CCA data (filtered suffixes)...")
+            # Pass None for word2vec_model to skip filtering during preparation
+            cca_data = ml_loader.prepare_cca_data(word2vec_model=None)
+            if cca_data is None:
+                print("Failed to prepare CCA data")
+                return None
+                
+            words = cca_data['words']
+            attributes = cca_data['attributes']
+            feature_names = cca_data['feature_names']
+            combined_df = cca_data['combined_df']
+            
+            print(f"   Initial data: {len(words)} words, {len(feature_names)} suffix features")
+
+            # Now filter to words that exist in Word2Vec (matching notebook approach)
+            if word2vec_model:
+                print("\n   Filtering to words in Word2Vec vocabulary...")
+                words_to_keep = []
+                indices_to_keep = []
+                for i, word in enumerate(words):
+                    if word in word2vec_model:
+                        words_to_keep.append(word)
+                        indices_to_keep.append(i)
+
+                # Update data to only include words with embeddings
+                words = words_to_keep
+                attributes = attributes[indices_to_keep]
+                combined_df = combined_df.iloc[indices_to_keep].reset_index(drop=True)
+
+                print(f"   After filtering: {len(words)} words with embeddings")
+            else:
+                print("   No Word2Vec model - using all words")
+
+            print(f"   Final CCA data: {len(words)} words, {len(feature_names)} suffix features")
         
         print(f"Processing {len(words)} words...")
         print(f"   Attributes shape: {attributes.shape}")
         print(f"   Number of features: {len(feature_names)}")
         
-        # Extract embeddings
-        print("\n2. Extracting Word2Vec embeddings...")
-        
-        if args.word2vec_model:
-            # Load custom model
-            embed_extractor = Word2VecExtractor(model_path=args.word2vec_model)
-            embeddings = embed_extractor.extract(words, normalize=False)
+        # Extract embeddings using the same Word2Vec model
+        print("\n3. Extracting Word2Vec embeddings...")
+
+        if embed_extractor and word2vec_model:
+            # Extract embeddings in exact order of words list
+            # Following notebook approach: iterate through words and get vectors
+            embeddings_list = []
+            missing_words = []
+
+            for word in words:
+                if word in word2vec_model:
+                    embeddings_list.append(word2vec_model[word])
+                else:
+                    # This should not happen if prepare_cca_data worked correctly
+                    missing_words.append(word)
+                    logger.warning(f"Word '{word}' not found in Word2Vec model despite filtering")
+
+            if missing_words:
+                raise ValueError(f"Found {len(missing_words)} words without embeddings after filtering: {missing_words[:5]}...")
+
+            embeddings = np.array(embeddings_list)
+            print(f"   Successfully extracted embeddings for all {len(words)} words")
         else:
-            try:
-                # Try pretrained model
-                embed_extractor = Word2VecExtractor(
-                    pretrained_model=args.pretrained_word2vec or 'glove-wiki-gigaword-100',
-                    use_pretrained=True
-                )
-                embeddings = embed_extractor.extract(words, normalize=False)
-            except:
-                print("   Failed to load pretrained model. Using random embeddings for demo...")
-                np.random.seed(42)
-                embeddings = np.random.randn(len(words), 100)
+            print("   No embedding model available. Using random embeddings for demo...")
+            np.random.seed(42)
+            embeddings = np.random.randn(len(words), 100)
         
         print(f"   Embeddings shape: {embeddings.shape}")
         
+        # Prepare separate data for Linear Decomposition if using MorphoLEX
+        decomp_embeddings = None
+        decomp_attributes = None
+        
+        if use_morpholex:
+            print("\n4. Preparing filtered data for Linear Decomposition...")
+            # Pass the combined_df from CCA preparation to maintain consistency
+            decomp_data = ml_loader.prepare_decomposition_data(combined_df=combined_df)
+            
+            if decomp_data:
+                decomp_words = decomp_data['words']
+                decomp_attributes = decomp_data['attributes']
+                
+                # Extract embeddings for decomposition words using the same Word2Vec model
+                if word2vec_model:
+                    # Extract embeddings in exact order
+                    decomp_embeddings_list = []
+                    for word in decomp_words:
+                        if word in word2vec_model:
+                            decomp_embeddings_list.append(word2vec_model[word])
+                        else:
+                            # This should not happen for decomposition words
+                            logger.warning(f"Decomposition word '{word}' not found in Word2Vec")
+                            # Use zero vector as fallback
+                            decomp_embeddings_list.append(np.zeros(embeddings.shape[1]))
+
+                    decomp_embeddings = np.array(decomp_embeddings_list)
+                else:
+                    # Use random for demo
+                    np.random.seed(43)
+                    decomp_embeddings = np.random.randn(len(decomp_words), embeddings.shape[1])
+                
+                print(f"   Decomposition data: {len(decomp_words)} words, {decomp_attributes.shape[1]} features")
+                print(f"   - {decomp_data['n_suffix_features']} suffix features")
+                print(f"   - {decomp_data['n_root_features']} root features")
+        
         # Analyze compositionality
-        print("\n3. Analyzing compositionality...")
+        print("\n5. Analyzing compositionality...")
+        # Use 20 components for words to match notebook
+        word_cca_components = 20 if use_morpholex else min(args.cca_components, 10)
         analyzer = CompositionalityAnalyzer(
-            cca_components=min(args.cca_components, 10),  # Fewer components for words
-            decomposition_method=args.decomposition_method
+            cca_components=word_cca_components,
+            decomposition_method=args.decomposition_method,
+            random_seed=2  # Match notebook's random seed
         )
         
         results = analyzer.analyze_compositionality(
@@ -236,20 +333,22 @@ def run_word_experiment(args) -> Optional[Dict]:
             n_permutations=args.n_permutations,
             n_trials=args.n_trials,
             group_by_attributes=False,  # Words are usually unique
-            verbose=args.verbose
+            verbose=args.verbose,
+            decomp_embeddings=decomp_embeddings,  # Separate data for decomposition
+            decomp_attributes=decomp_attributes   # Separate data for decomposition
         )
         
-        # Save results
-        if args.save_results:
-            save_path = os.path.join(args.output_dir, 'word_results.npz')
-            np.savez_compressed(save_path, **results)
-            print(f"\nResults saved to {save_path}")
+        # Always save results
+        os.makedirs(args.output_dir, exist_ok=True)
+        save_path = os.path.join(args.output_dir, 'word_results.npz')
+        np.savez_compressed(save_path, **results)
+        print(f"\nResults saved to {save_path}")
         
         # Plot if requested
         if args.plot:
-            plot_path = os.path.join(args.output_dir, 'word_compositionality.png')
-            analyzer.plot_results(results, save_path=plot_path)
-            print(f"Plot saved to {plot_path}")
+            # Generate 4 individual plots matching notebook style
+            analyzer.plot_results_individual(results, data_type='word', output_dir=args.output_dir)
+            print(f"Plots saved to {args.output_dir}/")
         
         return results
         
@@ -285,14 +384,19 @@ def run_kg_experiment(args) -> Optional[Dict]:
         ml_loader = MovieLensLoader(data_dir=args.movielens_dir)
         
         try:
-            kg_data = ml_loader.prepare_kg_data()
+            # Prepare KG data - default is to exclude occupation (only age and gender)
+            include_occupation = args.include_occupation  # False by default
+            kg_data = ml_loader.prepare_kg_data(include_occupation=include_occupation)
             users_df = kg_data['users_df']
             user_ids = kg_data['user_ids']
             attributes = kg_data['attributes']
             feature_names = kg_data['feature_names']
             
             print(f"Loaded {len(users_df)} users from MovieLens")
-            print(f"Demographics: {len(feature_names)} features")
+            if include_occupation:
+                print(f"Demographics: {len(feature_names)} features (gender, age, occupation)")
+            else:
+                print(f"Demographics: {len(feature_names)} features (gender, age only)")
         except Exception as e:
             print(f"Failed to load MovieLens data: {e}")
             print("Please ensure MovieLens 1M data is in the specified directory")
@@ -337,17 +441,67 @@ def run_kg_experiment(args) -> Optional[Dict]:
             verbose=args.verbose
         )
         
-        # Save results
-        if args.save_results:
-            save_path = os.path.join(args.output_dir, f'kg_{args.kg_model}_results.npz')
-            np.savez_compressed(save_path, **results)
-            print(f"\nResults saved to {save_path}")
+        # Always save results
+        os.makedirs(args.output_dir, exist_ok=True)
+        
+        # Save as NPZ
+        save_path = os.path.join(args.output_dir, f'kg_{args.kg_model}_results.npz')
+        np.savez_compressed(save_path, **results)
+        print(f"\nResults saved to {save_path}")
+        
+        # Also save as JSON for easier reading
+        json_path = os.path.join(args.output_dir, f'kg_{args.kg_model}_results.json')
+        # Convert numpy arrays to lists for JSON serialization
+        import json
+        
+        def convert_to_json_serializable(obj, skip_keys=None):
+            """Convert numpy types to Python native types for JSON serialization."""
+            if skip_keys is None:
+                skip_keys = {'cca_model', 'decomposer', 'analyzer'}  # Skip non-serializable objects
+            
+            if isinstance(obj, np.ndarray):
+                return obj.tolist()
+            elif isinstance(obj, np.bool_):
+                return bool(obj)
+            elif isinstance(obj, (np.int_, np.intc, np.intp, np.int8, np.int16, np.int32, np.int64,
+                                  np.uint8, np.uint16, np.uint32, np.uint64)):
+                return int(obj)
+            elif isinstance(obj, (np.float_, np.float16, np.float32, np.float64)):
+                return float(obj)
+            elif isinstance(obj, dict):
+                result = {}
+                for key, value in obj.items():
+                    if key not in skip_keys:  # Skip non-serializable keys
+                        try:
+                            result[key] = convert_to_json_serializable(value, skip_keys)
+                        except (TypeError, ValueError):
+                            # Skip values that can't be serialized
+                            pass
+                return result
+            elif isinstance(obj, (list, tuple)):
+                return [convert_to_json_serializable(item, skip_keys) for item in obj]
+            else:
+                # For any other type, try to convert to basic Python type
+                try:
+                    if hasattr(obj, '__dict__'):
+                        # Skip complex objects
+                        return str(type(obj).__name__)
+                    else:
+                        return obj
+                except:
+                    return str(obj)
+        
+        json_results = convert_to_json_serializable(results)
+        
+        with open(json_path, 'w') as f:
+            json.dump(json_results, f, indent=2)
+        print(f"Results also saved as JSON to {json_path}")
         
         # Plot if requested
         if args.plot:
-            plot_path = os.path.join(args.output_dir, f'kg_{args.kg_model}_compositionality.png')
-            analyzer.plot_results(results, save_path=plot_path)
-            print(f"Plot saved to {plot_path}")
+            # Generate 4 individual plots matching notebook style
+            analyzer.plot_results_individual(results, data_type='kg', output_dir=args.output_dir)
+            print(f"Plots saved to {args.output_dir}/")
         
         return results
         
@@ -509,9 +663,12 @@ Examples:
                        help='Output directory for results')
     
     # Sentence-specific options
+    parser.add_argument('--sentence-data-dir',
+                       default='data/sentence',
+                       help='Directory containing pre-prepared sentence data (user_texts.txt and dialogue_data.csv)')
     parser.add_argument('--dialogue-dir',
                        default='train',
-                       help='Directory containing Schema-Guided Dialogue data')
+                       help='(Deprecated) Directory containing Schema-Guided Dialogue data')
     parser.add_argument('--min-slots', type=int,
                        default=3,
                        help='Minimum slots per sentence')
@@ -525,13 +682,14 @@ Examples:
     
     # Word-specific options
     parser.add_argument('--morpholex-path',
+                       default='data/MorphoLEX_en.xlsx',
                        help='Path to MorphoLEX_en.xlsx file')
     parser.add_argument('--data-path',
                        help='Path to text file with words (one per line)')
     parser.add_argument('--word2vec-model',
-                       help='Path to custom Word2Vec model')
+                       help='Path to GoogleNews Word2Vec model (e.g., path/to/GoogleNews-vectors-negative300.bin.gz)')
     parser.add_argument('--pretrained-word2vec',
-                       default='glove-wiki-gigaword-100',
+                       default='word2vec-google-news-300',
                        help='Pretrained Word2Vec model name')
     parser.add_argument('--word-attribute-type',
                        default='morphological',
@@ -540,9 +698,10 @@ Examples:
     
     # KG-specific options
     parser.add_argument('--movielens-dir',
-                       default='ml-1m',
+                       default='data/ml-1m',
                        help='Directory containing MovieLens 1M data')
-    parser.add_argument('--kg-model',
+    parser.add_argument('--kg-embedding', '--kg-model',
+                       dest='kg_model',
                        default='TransE',
                        choices=['TransE', 'DistMult'],
                        help='KG embedding model type')
@@ -551,6 +710,8 @@ Examples:
                        help='Directory containing KG embeddings')
     parser.add_argument('--normalize-kg', action='store_true',
                        help='Normalize KG embeddings')
+    parser.add_argument('--include-occupation', action='store_true',
+                       help='Include occupation in KG attributes (default: only age and gender)')
     
     # Analysis options
     parser.add_argument('--cca-components', type=int,
@@ -564,10 +725,10 @@ Examples:
                        default='cca,decomposition,metrics',
                        help='Comma-separated analysis methods')
     parser.add_argument('--n-permutations', type=int,
-                       default=50,
+                       default=100,
                        help='Number of permutations for significance testing')
     parser.add_argument('--n-trials', type=int,
-                       default=50,
+                       default=100,
                        help='Number of trials for leave-one-out')
     parser.add_argument('--group-by-attributes', action='store_true',
                        default=True,

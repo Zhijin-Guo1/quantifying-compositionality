@@ -23,7 +23,7 @@ class SentenceConceptAttributes(BaseAttributeGenerator):
     """
     
     def __init__(self, 
-                 data_path: Path = Path("data/output"),
+                 data_path: Path = Path("data/sentence"),
                  cache_dir: Optional[Path] = None,
                  min_concepts: int = 3,
                  max_concepts: int = 4):

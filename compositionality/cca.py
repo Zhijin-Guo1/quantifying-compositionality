@@ -142,11 +142,14 @@ class CCAAnalyzer:
             'cca_model': cca_model
         }
         
-        logger.info(f"CCA Analysis Complete:")
+        logger.info(f"\nCCA Analysis Results:")
         logger.info(f"  Mean real correlation: {mean_real:.4f}")
         logger.info(f"  Mean permuted correlation: {mean_permuted:.4f}")
-        logger.info(f"  P-value: {overall_p_value:.4f}")
-        logger.info(f"  Significant: {results['significant']}")
+        logger.info(f"  Overall p-value: {overall_p_value:.4f}")
+        if results['significant']:
+            logger.info("  ✓ Significant linear alignment detected (p < 0.05)")
+        else:
+            logger.info("  ✗ No significant linear alignment (p >= 0.05)")
         
         return results
     

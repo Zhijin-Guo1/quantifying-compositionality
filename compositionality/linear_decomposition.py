@@ -4,6 +4,7 @@ import numpy as np
 from sklearn.utils import shuffle
 from typing import Dict, Tuple, Optional, List
 import logging
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -167,39 +168,49 @@ class LinearDecomposer:
             results: Complete analysis results
         """
         # Real data evaluation
-        logger.info("Evaluating on real data...")
+        logger.info("\n" + "="*60)
+        logger.info("LINEAR DECOMPOSITION ANALYSIS")
+        logger.info("="*60)
         
-        # Full reconstruction (no leave-one-out)
+        logger.info("\nStep 1: Computing attribute embeddings...")
         attribute_embeddings = self.compute_attribute_embeddings(attributes, embeddings)
+        
+        logger.info("Step 2: Reconstructing embeddings...")
         reconstructed = self.reconstruct_embeddings(attributes, attribute_embeddings)
         real_l2_loss = self.compute_reconstruction_loss(embeddings, reconstructed, 'l2')
+        logger.info(f"  L2 reconstruction loss: {real_l2_loss:.4f}")
         
-        # Leave-one-out evaluation
+        logger.info(f"\nStep 3: Leave-one-out evaluation ({n_trials_per_permutation} trials)...")
         loo_results = self.leave_one_out_evaluation(
             attributes, embeddings, n_trials_per_permutation
         )
         real_cosine_sim = loo_results['mean_cosine_similarity']
+        logger.info(f"  Mean cosine similarity: {real_cosine_sim:.4f}")
         
         # Permutation testing
-        logger.info(f"Running {n_permutations} permutation tests...")
+        logger.info(f"\nStep 4: Running {n_permutations} permutation tests for significance...")
         permuted_l2_losses = []
         permuted_cosine_sims = []
         
-        for i in range(n_permutations):
-            # Shuffle embeddings
-            shuffled_embeddings = shuffle(embeddings, random_state=None)
-            
-            # Full reconstruction
-            attr_emb_shuf = self.compute_attribute_embeddings(attributes, shuffled_embeddings)
-            recon_shuf = self.reconstruct_embeddings(attributes, attr_emb_shuf)
-            perm_l2 = self.compute_reconstruction_loss(shuffled_embeddings, recon_shuf, 'l2')
-            permuted_l2_losses.append(perm_l2)
-            
-            # Leave-one-out (subset for efficiency)
-            loo_shuf = self.leave_one_out_evaluation(
-                attributes, shuffled_embeddings, min(20, n_trials_per_permutation)
-            )
-            permuted_cosine_sims.append(loo_shuf['mean_cosine_similarity'])
+        with tqdm(total=n_permutations, desc="  Permutations", unit="perm") as pbar:
+            for i in range(n_permutations):
+                # Shuffle embeddings
+                shuffled_embeddings = shuffle(embeddings, random_state=None)
+                
+                # Full reconstruction
+                attr_emb_shuf = self.compute_attribute_embeddings(attributes, shuffled_embeddings)
+                recon_shuf = self.reconstruct_embeddings(attributes, attr_emb_shuf)
+                perm_l2 = self.compute_reconstruction_loss(shuffled_embeddings, recon_shuf, 'l2')
+                permuted_l2_losses.append(perm_l2)
+                
+                # Leave-one-out (subset for efficiency)
+                loo_shuf = self.leave_one_out_evaluation(
+                    attributes, shuffled_embeddings, min(20, n_trials_per_permutation)
+                )
+                permuted_cosine_sims.append(loo_shuf['mean_cosine_similarity'])
+                
+                pbar.update(1)
+                pbar.set_postfix({'L2': f'{perm_l2:.3f}', 'Cos': f'{loo_shuf["mean_cosine_similarity"]:.3f}'})
         
         permuted_l2_losses = np.array(permuted_l2_losses)
         permuted_cosine_sims = np.array(permuted_cosine_sims)
@@ -231,13 +242,17 @@ class LinearDecomposer:
             'significant_cosine': p_value_cosine < 0.05
         }
         
-        logger.info(f"Linear Decomposition Analysis Complete:")
-        logger.info(f"  Real L2 loss: {real_l2_loss:.4f}")
+        logger.info(f"\n" + "-"*40)
+        logger.info(f"Linear Decomposition Results:")
+        logger.info(f"  Real L2 loss: {real_l2_loss:.4f} (lower is better)")
         logger.info(f"  Mean permuted L2: {results['mean_permuted_l2']:.4f}")
-        logger.info(f"  Real cosine similarity: {real_cosine_sim:.4f}")
+        logger.info(f"  Real cosine similarity: {real_cosine_sim:.4f} (higher is better)")
         logger.info(f"  Mean permuted cosine: {results['mean_permuted_cosine']:.4f}")
         logger.info(f"  P-value (L2): {p_value_l2:.4f}")
         logger.info(f"  P-value (cosine): {p_value_cosine:.4f}")
+        if p_value_l2 < 0.05 and p_value_cosine < 0.05:
+            logger.info("  ✓ Significant compositionality detected (p < 0.05)")
+        logger.info("-"*40)
         
         return results
     

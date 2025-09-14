@@ -45,6 +45,16 @@ class Word2VecExtractor(EmbeddingExtractor):
     def load_model(self, model_path: str):
         """Load a Word2Vec model from file."""
         try:
+            # Try loading as binary Word2Vec format (for GoogleNews)
+            if model_path.endswith('.bin') or model_path.endswith('.bin.gz'):
+                self.keyed_vectors = KeyedVectors.load_word2vec_format(model_path, binary=True)
+                self.embedding_dim = self.keyed_vectors.vector_size
+                logger.info(f"Loaded Word2Vec binary model from {model_path}")
+                return
+        except Exception as e:
+            logger.debug(f"Not a binary Word2Vec format: {e}")
+            
+        try:
             # Try loading as full model
             self.model = Word2Vec.load(model_path)
             self.keyed_vectors = self.model.wv

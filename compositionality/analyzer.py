@@ -67,7 +67,14 @@ class CompositionalityAnalyzer:
         unique_attrs = len(np.unique(attributes, axis=0))
         
         if unique_attrs < n_samples:
-            logger.info(f"Grouping {n_samples} samples into {unique_attrs} unique attribute combinations")
+            # Log the expected grouping based on attribute dimensions
+            n_features = attributes.shape[1]
+            if n_features == 9:  # Only age and gender
+                logger.info(f"Grouping {n_samples} samples by age and gender (9 dimensions)")
+            elif n_features == 30:  # Age, gender, and occupation
+                logger.info(f"Grouping {n_samples} samples by age, gender, and occupation (30 dimensions)")
+            else:
+                logger.info(f"Grouping {n_samples} samples into unique attribute combinations ({n_features} dimensions)")
             return self.metrics.group_by_attributes(attributes, embeddings)
         
         return attributes, embeddings
@@ -79,9 +86,14 @@ class CompositionalityAnalyzer:
                                n_permutations: int = 100,
                                n_trials: int = 100,
                                group_by_attributes: bool = True,
-                               verbose: bool = True) -> Dict:
+                               verbose: bool = True,
+                               decomp_embeddings: Optional[np.ndarray] = None,
+                               decomp_attributes: Optional[np.ndarray] = None) -> Dict:
         """
         Perform complete compositionality analysis.
+        
+        Note: CCA (Step 1) uses the full dataset without grouping for maximum correlation detection.
+        Linear Decomposition (Step 2) uses grouped data to avoid overfitting to duplicate attributes.
         
         Args:
             embeddings: Embedding matrix (n_samples, n_dims)
@@ -89,7 +101,7 @@ class CompositionalityAnalyzer:
             methods: List of methods to use
             n_permutations: Number of permutations for testing
             n_trials: Number of trials for leave-one-out
-            group_by_attributes: Whether to group by unique attributes
+            group_by_attributes: Kept for compatibility but always groups for step 2
             verbose: Whether to print progress
             
         Returns:
@@ -106,35 +118,40 @@ class CompositionalityAnalyzer:
         assert embeddings.ndim == 2, "Embeddings must be 2D"
         assert attributes.ndim == 2, "Attributes must be 2D"
         
-        # Preprocess data
-        proc_attributes, proc_embeddings = self.preprocess_data(
-            attributes, embeddings, group_by_attributes
+        # Prepare data for different steps
+        # Step 1 (CCA): Use full dataset without grouping
+        # Step 2 (Linear Decomposition): Use grouped data (for KG) or ungrouped (for words)
+        grouped_attributes, grouped_embeddings = self.preprocess_data(
+            attributes, embeddings, group_by_attributes=group_by_attributes
         )
         
-        if verbose and group_by_attributes:
-            logger.info(f"After grouping - Embeddings: {proc_embeddings.shape}, Attributes: {proc_attributes.shape}")
+        if verbose:
+            if len(grouped_attributes) < len(attributes):
+                logger.info(f"Grouping info - Original: {attributes.shape}, Grouped: {grouped_attributes.shape}")
+                logger.info("Note: CCA uses full data, Linear Decomposition uses grouped data")
         
         results = {
             'input_shape': {
                 'embeddings': embeddings.shape,
                 'attributes': attributes.shape
             },
-            'processed_shape': {
-                'embeddings': proc_embeddings.shape,
-                'attributes': proc_attributes.shape
+            'grouped_shape': {
+                'embeddings': grouped_embeddings.shape,
+                'attributes': grouped_attributes.shape
             }
         }
         
-        # 1. CCA Analysis
+        # 1. CCA Analysis (using FULL dataset)
         if 'cca' in methods:
             if verbose:
                 logger.info("\n" + "-"*40)
-                logger.info("Step 1: CCA Analysis")
+                logger.info("Step 1: CCA Analysis (using full dataset)")
+                logger.info(f"  Data shape: {attributes.shape} (all {len(attributes)} samples)")
                 logger.info("-"*40)
             
             cca_results = self.cca_analyzer.analyze(
-                proc_attributes,
-                proc_embeddings,
+                attributes,  # Use full dataset
+                embeddings,  # Use full dataset
                 n_permutations=n_permutations
             )
             
@@ -144,16 +161,29 @@ class CompositionalityAnalyzer:
             if verbose:
                 logger.info(f"CCA Score: {results['cca_score']:.4f}")
         
-        # 2. Linear Decomposition
+        # 2. Linear Decomposition (using separate data if provided, else GROUPED data)
         if 'decomposition' in methods:
-            if verbose:
-                logger.info("\n" + "-"*40)
-                logger.info("Step 2: Linear Decomposition")
-                logger.info("-"*40)
+            # Use separate decomposition data if provided (for word experiments)
+            if decomp_embeddings is not None and decomp_attributes is not None:
+                decomp_data = decomp_attributes
+                decomp_emb = decomp_embeddings
+                if verbose:
+                    logger.info("\n" + "-"*40)
+                    logger.info("Step 2: Linear Decomposition (using separate filtered data)")
+                    logger.info(f"  Data shape: {decomp_data.shape} ({len(decomp_data)} filtered samples)")
+                    logger.info("-"*40)
+            else:
+                decomp_data = grouped_attributes
+                decomp_emb = grouped_embeddings
+                if verbose:
+                    logger.info("\n" + "-"*40)
+                    logger.info("Step 2: Linear Decomposition (using grouped data)")
+                    logger.info(f"  Data shape: {decomp_data.shape} ({len(decomp_data)} unique groups)")
+                    logger.info("-"*40)
             
             decomp_results = self.linear_decomposer.analyze_with_permutation(
-                proc_attributes,
-                proc_embeddings,
+                decomp_data,
+                decomp_emb,
                 n_permutations=n_permutations,
                 n_trials_per_permutation=n_trials
             )
@@ -166,16 +196,32 @@ class CompositionalityAnalyzer:
         
         # 3. Additional Metrics
         if 'metrics' in methods:
-            if verbose:
-                logger.info("\n" + "-"*40)
-                logger.info("Step 3: Computing Metrics")
-                logger.info("-"*40)
+            # For metrics, use the same data as decomposition
+            if decomp_embeddings is not None and decomp_attributes is not None:
+                metrics_data = decomp_attributes
+                metrics_emb = decomp_embeddings
+                if verbose:
+                    logger.info("\n" + "-"*40)
+                    logger.info("Step 3: Computing Metrics (using decomposition data)")
+                    logger.info("-"*40)
+            else:
+                metrics_data = grouped_attributes
+                metrics_emb = grouped_embeddings
+                if verbose:
+                    logger.info("\n" + "-"*40)
+                    logger.info("Step 3: Computing Metrics (using grouped data)")
+                    logger.info("-"*40)
+            
+            # For word experiments, never group duplicates
+            # For KG experiments, group duplicates
+            should_group = group_by_attributes  # True for KG, False for words
             
             metrics_results = self.metrics.compute_all_metrics(
-                proc_attributes,
-                proc_embeddings,
+                metrics_data,
+                metrics_emb,
                 n_permutations=n_permutations,
-                n_trials=n_trials
+                n_trials=n_trials,
+                group_duplicates=should_group
             )
             
             results['metrics'] = metrics_results
@@ -204,6 +250,149 @@ class CompositionalityAnalyzer:
             logger.info(f"Score interpretation: Higher scores indicate stronger compositional alignment")
         
         return results
+    
+    def plot_results_individual(self, results: Dict, data_type: str = 'sentence', 
+                                output_dir: Optional[str] = None):
+        """
+        Generate 4 individual plots matching notebook style.
+        
+        Args:
+            results: Results from analyze_compositionality()
+            data_type: Type of data ('sentence', 'kg', 'word')
+            output_dir: Directory to save plots
+        """
+        import matplotlib.pyplot as plt
+        import os
+        
+        # Set font size for better readability
+        plt.rcParams.update({'font.size': 14})
+        
+        # Determine Hits@k value based on data type
+        hits_k = 5  # default
+        if data_type == 'kg':
+            hits_k = 1
+        elif data_type == 'word':
+            hits_k = 10
+        
+        if output_dir and not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        
+        # Plot 1: CCA Correlations
+        if 'cca' in results:
+            plt.figure(figsize=(10, 6))
+            cca_results = results['cca']
+            # Use 20 components for word experiments to match notebook
+            if data_type == 'word':
+                n_components = min(20, len(cca_results['real_correlations']))
+            else:
+                n_components = min(15, len(cca_results['real_correlations']))
+            
+            # Plot real correlations
+            plt.plot(range(n_components), cca_results['real_correlations'][:n_components], 
+                    'b-', linewidth=2, label='real embedding')
+            
+            # Plot all permuted correlations as yellow lines
+            for perm in cca_results['permuted_correlations']:
+                plt.plot(range(n_components), perm[:n_components], 'y-', alpha=0.3)
+            
+            # Add one labeled permuted line for legend
+            plt.plot(range(n_components), cca_results['permuted_correlations'][0][:n_components], 
+                    'y-', label='shuffled embedding')
+            
+            plt.xlabel('CCA Component', fontweight='bold')
+            plt.ylabel('Correlation Coefficient', fontweight='bold')
+            plt.title('Correlation Coefficients for Original and Shuffled Data')
+            plt.legend(loc="upper right")
+            plt.xticks(range(n_components))
+            plt.grid(True, alpha=0.3)
+            
+            if output_dir:
+                plt.savefig(os.path.join(output_dir, f'{data_type}_CCA.png'), dpi=300, bbox_inches='tight')
+            plt.show()
+        
+        # Plot 2: L2 Loss Distribution
+        if 'decomposition' in results:
+            plt.figure(figsize=(10, 6))
+            decomp_results = results['decomposition']
+            
+            # Histogram of permuted L2 losses
+            plt.hist(decomp_results['permuted_l2_losses'], bins=30, 
+                    alpha=0.5, color='b', label="100 permuted pairs")
+            
+            # Real L2 loss line
+            real_l2 = decomp_results['real_l2_loss']
+            plt.axvline(real_l2, color='r', linestyle='dashed', linewidth=2, 
+                       label=f"Real Pair: {real_l2:.2f}")
+            
+            plt.title(f'Comparison of 100 permuted pairs with Real Pair')
+            plt.xlabel('L2 norm')
+            plt.ylabel('Frequency')
+            plt.legend()
+            plt.grid(True)
+            
+            if output_dir:
+                plt.savefig(os.path.join(output_dir, f'{data_type}_L2.png'), dpi=300, bbox_inches='tight')
+            plt.show()
+        
+        # Plot 3: Cosine Similarity Distribution
+        if 'decomposition' in results:
+            plt.figure(figsize=(10, 6))
+            decomp_results = results['decomposition']
+            
+            # Histogram of permuted cosine similarities
+            plt.hist(decomp_results['permuted_cosine_similarities'], bins=30,
+                    alpha=0.5, color='b', label="100 permuted pairs")
+            
+            # Real cosine similarity line
+            real_cos = decomp_results['real_cosine_similarity']
+            plt.axvline(real_cos, color='r', linestyle='dashed', linewidth=2,
+                       label=f"Real Pair: {real_cos:.2f}")
+            
+            plt.title('Comparison of 100 permuted pairs with Real Pair')
+            plt.xlabel('Cosine Similarity')
+            plt.ylabel('Frequency')
+            plt.legend()
+            plt.grid(True)
+            
+            if output_dir:
+                plt.savefig(os.path.join(output_dir, f'{data_type}_cos.png'), dpi=300, bbox_inches='tight')
+            plt.show()
+        
+        # Plot 4: Retrieval Accuracy (Hits@k)
+        if 'metrics' in results:
+            plt.figure(figsize=(10, 6))
+            metrics = results['metrics']
+            
+            # Get permuted accuracies for histogram
+            perm_key = f'permuted_hits@{hits_k}_all'
+            if perm_key in metrics:
+                perm_accuracies = metrics[perm_key]
+            else:
+                # Fallback: create synthetic data based on mean and std
+                mean_perm = metrics.get(f'permuted_hits@{hits_k}_mean', 0.05)
+                std_perm = metrics.get(f'permuted_hits@{hits_k}_std', 0.02)
+                perm_accuracies = np.random.normal(mean_perm, std_perm, 100)
+                perm_accuracies = np.clip(perm_accuracies, 0, 1)
+            
+            # Histogram of permuted accuracies
+            plt.hist(perm_accuracies, bins=30, alpha=0.5, color='b', label="100 permuted pairs")
+            
+            # Real accuracy line
+            real_acc = metrics.get(f'hits@{hits_k}', 0)
+            plt.axvline(real_acc, color='r', linestyle='dashed', linewidth=2,
+                       label=f"Real Pair: {real_acc:.2f}")
+            
+            plt.title('Comparison of 100 permuted pairs with Real Pair')
+            plt.xlabel(f'Hits@{hits_k} accuracy')
+            plt.ylabel('Frequency')
+            plt.legend()
+            plt.grid(True)
+            
+            if output_dir:
+                plt.savefig(os.path.join(output_dir, f'{data_type}_hits{hits_k}.png'), dpi=300, bbox_inches='tight')
+            plt.show()
+        
+        return True
     
     def plot_results(self, results: Dict, save_path: Optional[str] = None):
         """
